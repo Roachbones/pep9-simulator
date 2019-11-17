@@ -12,7 +12,7 @@ Demonstrates the output of five mathematical operations on them.
 
 int main()
 {
-	//pretty straightforward
+	//very confusing
 	int a;
 	int b;
 	printf("a: ");
@@ -22,6 +22,7 @@ int main()
 	printf("%d + %d = %d\n", a, b, a + b);
 	printf("%d - %d = %d\n", a, b, a - b);
 	printf("%d * %d = %d\n", a, b, a * b);
+	printf("All done.\n");
 	if (b == 0) {
 		printf("Can't divide by zero.\n");
 	}
