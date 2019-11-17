@@ -2,6 +2,8 @@
 #include <stdio.h>
 
 int Mem[65536]; // Pep/9 main memory. initialized to zeroes
+int N, Z, V, C; //treat these like Booleans. they should be 0 or 1. initialized to 0
+int A, X; //registers. 1 word each...?
 
 int digit_to_int(char d) {
 	//example input: '5'
