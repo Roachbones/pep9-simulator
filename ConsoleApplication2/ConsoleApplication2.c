@@ -22,7 +22,6 @@ int main()
 	printf("%d + %d = %d\n", a, b, a + b);
 	printf("%d - %d = %d\n", a, b, a - b);
 	printf("%d * %d = %d\n", a, b, a * b);
-	printf("All done.\n");
 	if (b == 0) {
 		printf("Can't divide by zero.\n");
 	}
@@ -30,4 +29,5 @@ int main()
 		printf("%d / %d = %d\n", a, b, a / b);
 		printf("%d %% %d = %d\n", a, b, a % b);
 	}
+	printf("All done.\n");
 }
