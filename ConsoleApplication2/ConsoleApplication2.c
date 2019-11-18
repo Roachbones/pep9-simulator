@@ -13,8 +13,8 @@ int N, Z, V, C; //treat these like Booleans. they should be 0 or 1. initialized 
 int A, X; //registers. 1 word each...?
 
 int digit_to_int(char d) {
-	//example input: '5'
-	//example output: 5
+	//example input: 'B'
+	//example output: 11
 	switch (d) {
 	case '0':
 		return 0;
@@ -74,13 +74,17 @@ int bytestring_to_int(char s[3]) {
 	return digit_to_int(s[0]) * 16 + digit_to_int(s[1]);
 }
 
-int get_operand(int aaa, int address_spec) {
+
+int resolve_address(int aaa, int address_spec) {
 	switch (aaa)
 	{
-	case 0: //immediate
-		return address_spec;
+	case 0: //immediate addressing is taken care of in read_byte
+		printf("AAAA");
 		break;
 	case 1: //direct
+		return address_spec;
+		break;
+	case 2: //indirect
 		return Mem[address_spec];
 		break;
 	default:
@@ -88,8 +92,26 @@ int get_operand(int aaa, int address_spec) {
 		break;
 	}
 }
+int read_byte(int aaa, int address_spec) {
+	if (aaa == 0) { //immediate addressing
+		return address_spec;
+	}
+	int address = resolve_address(aaa, address_spec);
+	if (address == 0xFC15) { //charIn
+		scanf("%c", &Mem[address]); //cast char to int
+		return Mem[address];
+	}
+	return Mem[address];
+}
+void write_byte(int aaa, int address_spec, int new_byte) {
+	int address = resolve_address(aaa, address_spec);
+	if (address == 0xFC16) { //charOut
+		printf("%c", new_byte);
+	}
+	Mem[address] = new_byte;
+}
 
-int* r_to_register(int r) { // 0 -> &A, 1 -> &X
+int* r_to_register(int r) { // returns a pointer to the appropriate register. 0 -> &A, 1 -> &X
 	switch (r)
 	{
 	case 0:
@@ -97,25 +119,36 @@ int* r_to_register(int r) { // 0 -> &A, 1 -> &X
 	case 1:
 		return &X;
 	default:
-		printf("AAAAHHHH");
+		return 0;
 		break;
 	}
 }
 
+void set_NZ_from_word(int w) { //w will usually be a register
+	Z = (w == 0);
+	N = (w < 0);
+}
 int LDBr(int *R, int aaa, int address_spec) {
-	int operand = get_operand(aaa, address_spec);
-	*R = operand;
-	// todo: set N and Z
+	*R = read_byte(aaa, address_spec);
+	set_NZ_from_word(*R);
+}
+int STBr(int *R, int aaa, int address_spec) {
+	if (aaa == 0) {
+		printf("Pep/9 ERROR: STBr does not accept immediate addressing!\n");
+	};
+	write_byte(aaa, address_spec, *R);
+	set_NZ_from_word(*R);
 }
 
 int main()
 {	
 	printf("Starting simulator...\n\n");
 	
-	char bytecode[300];
-	int i = 0;
+	char bytecode[300]; //up to 300 characters / 100 bytecode bytes
 	scanf("%[^\n]", &bytecode);
-
+	
+	// we should eventually change this so it takes in bytecode until it reaches the zz
+	// but for now let's just not use zz and save ourselves some typing
 	for (int i = 0; i < strlen(bytecode); i += 3)
 	{
 		Mem[i / 3] = bytestring_to_int(bytecode + i);
@@ -139,6 +172,10 @@ int main()
 	int aaa = 0; //addressing mode that the instruction specifies
 	do //Von Neumann cycle
 	{
+		// these should be set before they're checked, every cycle
+		// let's reset them to an invalid value now so we notice if we try to read them before we set them
+		r = -1; aaa = -1;
+
 		inst_spec = Mem[PC];
 		operand_spec = Mem[PC + 1] * 16 + Mem[PC + 2]; //not used for unary instructions
 
@@ -167,7 +204,8 @@ int main()
 		naked_inst_spec = inst_spec - inst_spec_clothes;
 		R = r_to_register(r);
 
-		printf("\ninst_spec: %d\nnaked_inst_spec: %d\nr: %d\naaa: %d\n", inst_spec, naked_inst_spec, r, aaa);
+		printf("\ninst_spec: %d\nnaked_inst_spec: %d\nr: %d    aaa: %d\n", inst_spec, naked_inst_spec, r, aaa);
+		printf("A: %d    X: %d\n", A, X);
 
 		switch (naked_inst_spec)
 		{
@@ -178,6 +216,11 @@ int main()
 			PC += 2;
 			printf("Executing instruction LDBr.\n");
 			LDBr(R, aaa, operand_spec);
+			break;
+		case 240: //STBr
+			PC += 2;
+			printf("Executing instruction STBr.\n");
+			STBr(R, aaa, operand_spec);
 			break;
 		default:
 			printf("Unimplemented instruction specifier: 0d%d / 0x%x\n", inst_spec, inst_spec);
