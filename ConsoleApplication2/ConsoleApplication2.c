@@ -3,16 +3,10 @@
 
 int VERBOSE = 1; // If it's 1, we'll print lots of debug statements during simulation. Otherwise, just Pep/9 output.
 
-char garbage;
-
-void pause() {
-	printf("press enter to continue.\n");
-	scanf("%c", &garbage);
-}
-
 int Mem[65536]; // Pep/9 main memory. initialized to zeroes
 int N, Z, V, C; //treat these like Booleans. they should be 0 or 1. initialized to 0
 int A, X; //registers. 1 word each...?
+int batch_input_size; //pretty much unused
 
 int digit_to_int(char d) {
 	//example input: 'B'
@@ -100,7 +94,12 @@ int read_byte(int aaa, int address_spec) {
 	}
 	int address = resolve_address(aaa, address_spec);
 	if (address == 0xFC15) { //charIn
+		if (VERBOSE) {printf("Enter character: ");}
+		// this doesn't work very well due to C's input buffer quirks
+		// all the stackoverflow answers beg you to use something besides scanf
+		// but Dr. Williamson only showed us scanf so 🤷
 		scanf("%c", &Mem[address]); //cast char to int
+		if (VERBOSE) {printf("\n");}
 		return Mem[address];
 	}
 	return Mem[address];
@@ -148,9 +147,8 @@ int STBr(int *R, int aaa, int address_spec) {
 
 int main()
 {	
-	printf("Input bytecode: ");
-	
 	char bytecode[300]; //up to 300 characters / 100 bytecode bytes
+	printf("Input bytecode: ");
 	scanf("%[^\n]", &bytecode); //example: D1 00 0D F1 FC 16 D1 00 0E F1 FC 16 00 48 69
 	
 	// we should eventually change this so it takes in bytecode until it reaches the zz
@@ -165,6 +163,9 @@ int main()
 	{
 		printf("%d ", Mem[i]);
 	}
+
+	printf("Input batch input: ");
+
 	printf("\nStarting simulation...\n");
 	
 	int PC = 0;
