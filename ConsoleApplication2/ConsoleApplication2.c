@@ -1,6 +1,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 
+int VERBOSE = 1; // If it's 1, we'll print lots of debug statements during simulation. Otherwise, just Pep/9 output.
+
 char garbage;
 
 void pause() {
@@ -106,7 +108,11 @@ int read_byte(int aaa, int address_spec) {
 void write_byte(int aaa, int address_spec, int new_byte) {
 	int address = resolve_address(aaa, address_spec);
 	if (address == 0xFC16) { //charOut
-		printf("%c", new_byte);
+		if (VERBOSE) {
+			printf("charOut output: %c\n", new_byte);
+		} else {
+			printf("%c", new_byte);
+		}
 	}
 	Mem[address] = new_byte;
 }
@@ -142,10 +148,10 @@ int STBr(int *R, int aaa, int address_spec) {
 
 int main()
 {	
-	printf("Starting simulator...\n\n");
+	printf("Input bytecode: ");
 	
 	char bytecode[300]; //up to 300 characters / 100 bytecode bytes
-	scanf("%[^\n]", &bytecode);
+	scanf("%[^\n]", &bytecode); //example: D1 00 0D F1 FC 16 D1 00 0E F1 FC 16 00 48 69
 	
 	// we should eventually change this so it takes in bytecode until it reaches the zz
 	// but for now let's just not use zz and save ourselves some typing
@@ -159,7 +165,7 @@ int main()
 	{
 		printf("%d ", Mem[i]);
 	}
-	printf("\n");
+	printf("\nStarting simulation...\n");
 	
 	int PC = 0;
 	int inst_spec;
@@ -177,7 +183,7 @@ int main()
 		r = -1; aaa = -1;
 
 		inst_spec = Mem[PC];
-		operand_spec = Mem[PC + 1] * 16 + Mem[PC + 2]; //not used for unary instructions
+		operand_spec = Mem[PC + 1] * 16 * 16 + Mem[PC + 2]; //not used for unary instructions
 
 		if (inst_spec < 6) { //XXXX XXXX
 			inst_spec_clothes = 0;
@@ -204,22 +210,24 @@ int main()
 		naked_inst_spec = inst_spec - inst_spec_clothes;
 		R = r_to_register(r);
 
-		printf("\ninst_spec: %d\nnaked_inst_spec: %d\nr: %d    aaa: %d\n", inst_spec, naked_inst_spec, r, aaa);
-		printf("A: %d    X: %d\n", A, X);
+		if (VERBOSE) {
+			printf("\ninst_spec: %d\nnaked_inst_spec: %d\nr: %d    aaa: %d\n", inst_spec, naked_inst_spec, r, aaa);
+			printf("A: %d    X: %d\n", A, X);
+		}
 
 		switch (naked_inst_spec)
 		{
 		case 0: //STOP
-			printf("Executing instruction STOP.\n");
+			if (VERBOSE) {printf("Executing instruction STOP.\n");}
 			break; //this is handled by the while condition
 		case 208: //LDBr
 			PC += 2;
-			printf("Executing instruction LDBr.\n");
+			if (VERBOSE) {printf("Executing instruction LDBr.\n");}
 			LDBr(R, aaa, operand_spec);
 			break;
 		case 240: //STBr
 			PC += 2;
-			printf("Executing instruction STBr.\n");
+			if (VERBOSE) {printf("Executing instruction STBr.\n");}
 			STBr(R, aaa, operand_spec);
 			break;
 		default:
@@ -229,5 +237,5 @@ int main()
 
 		PC++;
 	} while (inst_spec != 0);
-
+	printf("\nSimulation over.\n");
 }
