@@ -6,7 +6,7 @@ int VERBOSE = 1; // If it's 1, we'll print lots of debug statements during simul
 int Mem[65536]; // Pep/9 main memory. initialized to zeroes
 int N, Z, V, C; //treat these like Booleans. they should be 0 or 1. initialized to 0
 int A, X; //registers. 1 word each...?
-int batch_input_size; //pretty much unused
+int PC = 0;
 
 int digit_to_int(char d) {
 	//example input: 'B'
@@ -131,16 +131,20 @@ void set_NZ_from_word(int w) { //w will usually be a register
 	Z = (w == 0);
 	N = (w < 0);
 }
-int LDBr(int *R, int aaa, int address_spec) {
+
+void LDBr(int *R, int aaa, int address_spec) {
 	*R = read_byte(aaa, address_spec);
 	set_NZ_from_word(*R);
 }
-int STBr(int *R, int aaa, int address_spec) {
+void STBr(int *R, int aaa, int address_spec) {
 	if (aaa == 0) {
 		printf("Pep/9 ERROR: STBr does not accept immediate addressing!\n");
 	};
 	write_byte(aaa, address_spec, *R);
 	set_NZ_from_word(*R);
+}
+void BR(int a, int address_spec) {
+	PC = read_byte(a, address_spec);
 }
 
 int main()
@@ -164,7 +168,6 @@ int main()
 
 	printf("\nStarting simulation...\n");
 	
-	int PC = 0;
 	int inst_spec;
 	int naked_inst_spec;
 	int inst_spec_clothes;
@@ -212,11 +215,17 @@ int main()
 			printf("A: %d    X: %d\n", A, X);
 		}
 
+		PC++; //increment program counter before instruction is executed
+
 		switch (naked_inst_spec)
 		{
 		case 0: //STOP
 			if (VERBOSE) {printf("Executing instruction STOP.\n");}
 			break; //this is handled by the while condition
+		case 18: //BR
+			if (VERBOSE) {printf("Executing instruction BR.\n");}
+			BR(aaa, operand_spec);
+			break;
 		case 208: //LDBr
 			PC += 2;
 			if (VERBOSE) {printf("Executing instruction LDBr.\n");}
@@ -231,8 +240,6 @@ int main()
 			printf("Unimplemented instruction specifier: 0d%d / 0x%x\n", inst_spec, inst_spec);
 			break;
 		}
-
-		PC++;
 	} while (inst_spec != 0);
 	printf("\nSimulation over.\n");
 }
