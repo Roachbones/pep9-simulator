@@ -65,11 +65,9 @@ int digit_to_int(char d) {
 		break;
 	}
 }
-
 int bytestring_to_int(char s[3]) {
 	return digit_to_int(s[0]) * 16 + digit_to_int(s[1]);
 }
-
 
 int resolve_address(int aaa, int address_spec) {
 	switch (aaa)
@@ -163,8 +161,6 @@ int main()
 	{
 		printf("%d ", Mem[i]);
 	}
-
-	printf("Input batch input: ");
 
 	printf("\nStarting simulation...\n");
 	
