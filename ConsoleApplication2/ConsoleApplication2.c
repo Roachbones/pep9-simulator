@@ -7,6 +7,7 @@ int Mem[65536]; // Pep/9 main memory. initialized to zeroes
 int N, Z, V, C; //treat these like Booleans. they should be 0 or 1. initialized to 0
 int A, X; //registers. 1 word each...?
 int PC = 0;
+int SP = 0xFB8F; //should be stored at Mem[0xFFF8]
 
 int digit_to_int(char d) {
 	//example input: 'B'
@@ -70,26 +71,53 @@ int bytestring_to_int(char s[3]) {
 }
 
 int resolve_address(int aaa, int address_spec) {
+	// address_spec = pep_int_to_c_int(address_spec);
 	switch (aaa)
 	{
 	case 0: //immediate addressing is taken care of in read_byte
-		printf("AAAA");
+		printf("error: immediate addressing shouldn't be resolved");
 		break;
 	case 1: //direct
 		return address_spec;
-		break;
 	case 2: //indirect
 		return Mem[address_spec];
-		break;
+	case 3: //stack-relative
+		// address specifiers are signed in some contexts
+		// so if we do math with them then we need to chop off the extra bits
+		return (SP + address_spec) & 0xFFFF;
+	case 4: //stack-relative deferred
+		return Mem[(SP + address_spec) & 0xFFFF];
+	case 5: //indexed
+		return (address_spec + X) & 0xFFFF;
+	case 6: //stack-indexed
+		return (SP + address_spec + X) & 0xFFFF;
+	case 7: //stack-indexed deferred
+		return (Mem[(SP + address_spec) & 0xFFFF] + X) & 0xFFFF;
 	default:
 		printf("AAAAAAAAAAAAAAAA");
 		break;
 	}
 }
-int read_byte(int aaa, int address_spec) {
-	if (aaa == 0) { //immediate addressing
-		return address_spec;
+
+// I'm pretty sure these can be simplified
+int pep_int_to_c_int(int n) { //n should be an int representing a Pep/9 word
+	if (n >> 15) { // most significant bit is 1
+		return - ((n ^ 0xFFFF) + 1); //convert to positive, then to a negative c int
+	} else {
+		return n;
 	}
+}
+int c_int_to_pep_int(int n) {
+	if (n < 0) {
+		return ((-n) ^ 0xFFFF) + 1; //convert to positive, then to a negative pep int
+	} else {
+		return n;
+	}
+}
+
+// returns the byte stored at the address specified.
+int read_byte(int aaa, int address_spec) {
+	if (aaa == 0) { return address_spec; } //immediate addressing
 	int address = resolve_address(aaa, address_spec);
 	if (address == 0xFC15) { //charIn
 		if (VERBOSE) {printf("Enter character: ");}
@@ -100,18 +128,33 @@ int read_byte(int aaa, int address_spec) {
 		if (VERBOSE) {printf("\n");}
 		return Mem[address];
 	}
+	//printf("\t\t\t\treading 0x%X", address);
 	return Mem[address];
 }
+//returns the word stored at the address specified.
+int read_word(int aaa, int address_spec) {
+	if (aaa == 0) { return address_spec; } //immediate addressing
+	int address = resolve_address(aaa, address_spec);
+	return (read_byte(1, address) << 8) + read_byte(1, address + 1); //with direct addressing
+}
+// writes new_byte at the address specified.
 void write_byte(int aaa, int address_spec, int new_byte) {
 	int address = resolve_address(aaa, address_spec);
 	if (address == 0xFC16) { //charOut
 		if (VERBOSE) {
-			printf("charOut output: %c\n", new_byte);
+			printf("\t\tcharOut output: %c\n", new_byte);
 		} else {
 			printf("%c", new_byte);
 		}
 	}
+	//printf("\t\t\t\twriting 0x%X", address);
 	Mem[address] = new_byte;
+}
+// writes new_word at the address specified.
+void write_word(int aaa, int address_spec, int new_word) {
+	int address = resolve_address(aaa, address_spec);
+	write_byte(1, address, new_word >> 8);
+	write_byte(1, address + 1, new_word % 256);
 }
 
 int* r_to_register(int r) { // returns a pointer to the appropriate register. 0 -> &A, 1 -> &X
@@ -121,9 +164,11 @@ int* r_to_register(int r) { // returns a pointer to the appropriate register. 0 
 		return &A;
 	case 1:
 		return &X;
-	default:
+	case -1:
 		return 0;
-		break;
+	default:
+		printf("error: invalid register bit.");
+		return 0;
 	}
 }
 
@@ -133,23 +178,60 @@ void set_NZ_from_word(int w) { //w will usually be a register
 }
 
 void LDBr(int *R, int aaa, int address_spec) {
-	*R = read_byte(aaa, address_spec);
+	*R = (*R & (0xFF00)) + read_byte(aaa, address_spec); //most significant byte remains unchanged
+	set_NZ_from_word(*R);
+}
+void LDWr(int *R, int aaa, int address_spec) {
+	*R = read_word(aaa, address_spec);
 	set_NZ_from_word(*R);
 }
 void STBr(int *R, int aaa, int address_spec) {
 	if (aaa == 0) {
 		printf("Pep/9 ERROR: STBr does not accept immediate addressing!\n");
 	};
-	write_byte(aaa, address_spec, *R);
+	write_byte(aaa, address_spec, *R & 0x00FF); //only write least significant byte
 	set_NZ_from_word(*R);
 }
+void STWr(int *R, int aaa, int address_spec) {
+	if (aaa == 0) {
+		printf("Pep/9 ERROR: STWr does not accept immediate addressing!\n");
+	};
+	write_word(aaa, address_spec, *R);
+	set_NZ_from_word(*R);
+}
+
 void BR(int a, int address_spec) {
+	// PC is always positive, right? so we don't need to worry about converting it
 	PC = read_byte(a, address_spec);
+}
+void BRV(int a, int address_spec) {
+	if (V) {
+		BR(a, address_spec);
+	}
+}
+
+void ADDSP(int aaa, int address_spec) {
+	SP += pep_int_to_c_int(read_byte(aaa, address_spec));
+}
+void SUBSP(int aaa, int address_spec) {
+	SP -= pep_int_to_c_int(read_byte(aaa, address_spec));
+}
+void MOVSPA() {
+	A = SP;
+}
+
+void DECO(int aaa, int address_spec) {
+	if (VERBOSE) {
+		printf("\t\tDECO output: %d", read_word(aaa, address_spec));
+	} else {
+		printf("%d", read_word(aaa, address_spec));
+	}
 }
 
 int main()
 {	
-	char bytecode[300]; //up to 300 characters / 100 bytecode bytes
+	printf("%d %d\n", pep_int_to_c_int(0x0005), pep_int_to_c_int(0xFFFE));
+	char bytecode[900]; //up to 900 characters / 300 bytecode bytes
 	printf("Input bytecode: ");
 	scanf("%[^\n]", &bytecode); //example: D1 00 0D F1 FC 16 D1 00 0E F1 FC 16 00 48 69
 	
@@ -180,10 +262,9 @@ int main()
 	{
 		// these should be set before they're checked, every cycle
 		// let's reset them to an invalid value now so we notice if we try to read them before we set them
-		r = -1; aaa = -1;
+		r = -1; aaa = -1; operand_spec = -1;
 
 		inst_spec = Mem[PC];
-		operand_spec = Mem[PC + 1] * 16 * 16 + Mem[PC + 2]; //not used for unary instructions
 
 		if (inst_spec < 6) { //XXXX XXXX
 			inst_spec_clothes = 0;
@@ -210,12 +291,19 @@ int main()
 		naked_inst_spec = inst_spec - inst_spec_clothes;
 		R = r_to_register(r);
 
-		if (VERBOSE) {
-			printf("\ninst_spec: %d\nnaked_inst_spec: %d\nr: %d    aaa: %d\n", inst_spec, naked_inst_spec, r, aaa);
-			printf("A: %d    X: %d\n", A, X);
+		if (naked_inst_spec < 18) { //unary instruction
+			PC += 1;
+		} else { //non-unary instruction
+			operand_spec = (Mem[PC + 1] << 8) + Mem[PC + 2]; //not used for unary instructions
+			PC += 3;
 		}
 
-		PC++; //increment program counter before instruction is executed
+		if (VERBOSE) {
+			printf("\ninst_spec: 0x%X\nnaked_inst_spec: 0x%X\n", inst_spec, naked_inst_spec);
+			if (operand_spec != -1) {printf("operand_spec: 0x%04X\n", operand_spec);}
+			printf("r: %d\taaa: %d\n", r, aaa);
+			printf("A: %d\tX: %d\tSP: 0x%X\n", A, X, SP);
+		}
 
 		switch (naked_inst_spec)
 		{
@@ -226,13 +314,31 @@ int main()
 			if (VERBOSE) {printf("Executing instruction BR.\n");}
 			BR(aaa, operand_spec);
 			break;
+		case 56: // DECO
+			if (VERBOSE) {printf("Executing instruction DECO.\n");}
+			DECO(aaa, operand_spec);
+			break;
+		case 80: //ADDSP
+			if (VERBOSE) {printf("Executing instruction ADDSP.\n");}
+			ADDSP(aaa, operand_spec);
+			break;
+		case 88: //SUBSP
+			if (VERBOSE) {printf("Executing instruction SUBSP.\n");}
+			SUBSP(aaa, operand_spec);
+			break;
+		case 192: // LDWr
+			if (VERBOSE) {printf("Executing instruction LDBr.\n");}
+			LDWr(R, aaa, operand_spec);
+			break;
 		case 208: //LDBr
-			PC += 2;
 			if (VERBOSE) {printf("Executing instruction LDBr.\n");}
 			LDBr(R, aaa, operand_spec);
 			break;
+		case 224: //STWr
+			if (VERBOSE) {printf("Executing instruction STWr.\n");}
+			STWr(R, aaa, operand_spec);
+			break;
 		case 240: //STBr
-			PC += 2;
 			if (VERBOSE) {printf("Executing instruction STBr.\n");}
 			STBr(R, aaa, operand_spec);
 			break;
@@ -240,6 +346,13 @@ int main()
 			printf("Unimplemented instruction specifier: 0d%d / 0x%x\n", inst_spec, inst_spec);
 			break;
 		}
+
+		// make sure all our "bytes" only store 1 byte of information
+		for (int i=0; i<0xFFFF; i++) {
+			if (Mem[i] > 0xFF) {printf("Error: byte 0x%X invalid value (0x%X)", i, Mem[i]);}
+		}
+
 	} while (inst_spec != 0);
+
 	printf("\nSimulation over.\n");
 }
