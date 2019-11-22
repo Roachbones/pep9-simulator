@@ -3,11 +3,19 @@
 
 int VERBOSE = 1; // If it's 1, we'll print lots of debug statements during simulation. Otherwise, just Pep/9 output.
 
-int Mem[65536]; // Pep/9 main memory. initialized to zeroes
+// Pep/9 main memory. mostly initialized to zeroes, but with preset machine vectors
+int Mem[65536] = {
+	[0xFFF4] = 0xFB, [0xFFF5] = 0x8F, // initial SP
+	[0xFFF6] = 0xFC, [0xFFF7] = 0x0F,
+	[0xFFF8] = 0xFC, [0xFFF9] = 0x15, // charIn
+	[0xFFFA] = 0xFC, [0xFFFB] = 0x15, // charOut
+	[0xFFFC] = 0xFC, [0xFFFD] = 0x17,
+	[0xFFFE] = 0xFC, [0xFFFF] = 0x52
+};
 int N, Z, V, C; //treat these like Booleans. they should be 0 or 1. initialized to 0
-int A, X; //registers. 1 word each...?
+int A, X; //registers. 1 word each
 int PC = 0;
-int SP = 0xFB8F; //should be stored at Mem[0xFFF8]
+int SP = 0xFB8F;
 
 int digit_to_int(char d) {
 	//example input: 'B'
@@ -179,7 +187,7 @@ void set_NZ_from_word(int w) { //w will usually be a register
 
 void LDBr(int *R, int aaa, int address_spec) {
 	*R = (*R & (0xFF00)) + read_byte(aaa, address_spec); //most significant byte remains unchanged
-	set_NZ_from_word(*R);
+	set_NZ_from_word(*R & 0x00FF); // N <- 0, Z <- (*R{8..15} = 0)
 }
 void LDWr(int *R, int aaa, int address_spec) {
 	*R = read_word(aaa, address_spec);
@@ -190,14 +198,12 @@ void STBr(int *R, int aaa, int address_spec) {
 		printf("Pep/9 ERROR: STBr does not accept immediate addressing!\n");
 	};
 	write_byte(aaa, address_spec, *R & 0x00FF); //only write least significant byte
-	set_NZ_from_word(*R);
 }
 void STWr(int *R, int aaa, int address_spec) {
 	if (aaa == 0) {
 		printf("Pep/9 ERROR: STWr does not accept immediate addressing!\n");
 	};
 	write_word(aaa, address_spec, *R);
-	set_NZ_from_word(*R);
 }
 
 void BR(int a, int address_spec) {
@@ -230,7 +236,6 @@ void DECO(int aaa, int address_spec) {
 
 int main()
 {	
-	printf("%d %d\n", pep_int_to_c_int(0x0005), pep_int_to_c_int(0xFFFE));
 	char bytecode[900]; //up to 900 characters / 300 bytecode bytes
 	printf("Input bytecode: ");
 	scanf("%[^\n]", &bytecode); //example: D1 00 0D F1 FC 16 D1 00 0E F1 FC 16 00 48 69
