@@ -207,7 +207,6 @@ void STWr(int *R, int aaa, int address_spec) {
 }
 
 void BR(int a, int address_spec) {
-	// PC is always positive, right? so we don't need to worry about converting it
 	PC = read_byte(a, address_spec);
 }
 void BRV(int a, int address_spec) {
